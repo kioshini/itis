@@ -1,0 +1,178 @@
+"""
+Обработчик команды /search - основная функциональность бота
+"""
+from aiogram import Router, F
+from aiogram.filters import Command, StateFilter
+from aiogram.fsm.context import FSMContext
+from aiogram.fsm.state import State, StatesGroup
+from aiogram.types import Message, CallbackQuery
+from keyboards.inline import get_back_keyboard
+from database.db import db
+from services.ai_service import ai_service
+from services.game_api import game_api_service
+from utils.formatters import format_games_list
+
+router = Router()
+
+
+class SearchStates(StatesGroup):
+    """Состояния для процесса поиска"""
+    waiting_for_query = State()
+
+
+@router.message(Command("search"))
+async def cmd_search(message: Message, state: FSMContext):
+    """Обработка команды /search"""
+    search_prompt = """
+🔍 <b>Поиск игр по описанию</b>
+
+Опишите игру, которую вы ищете. Будьте максимально конкретны!
+
+<b>Примеры хороших запросов:</b>
+• "Ищу RPG с открытым миром, драконами и магией"
+• "Хочу шутер от первого лица про вторую мировую войну"
+• "Нужна стратегия про космос с элементами строительства базы"
+• "Игра как The Witcher, но про самураев в Японии"
+
+Просто отправьте сообщение с вашим описанием!
+Для отмены введите /cancel
+"""
+    
+    await message.answer(
+        text=search_prompt,
+        parse_mode="HTML"
+    )
+    
+    await state.set_state(SearchStates.waiting_for_query)
+
+
+@router.callback_query(F.data == "search")
+async def callback_search(callback: CallbackQuery, state: FSMContext):
+    """Обработка callback для поиска"""
+    search_prompt = """
+🔍 <b>Поиск игр по описанию</b>
+
+Опишите игру, которую вы ищете. Будьте максимально конкретны!
+
+<b>Примеры хороших запросов:</b>
+• "Ищу RPG с открытым миром, драконами и магией"
+• "Хочу шутер от первого лица про вторую мировую войну"
+• "Нужна стратегия про космос с элементами строительства базы"
+• "Игра как The Witcher, но про самураев в Японии"
+
+Просто отправьте сообщение с вашим описанием!
+Для отмены введите /cancel
+"""
+    
+    await callback.message.edit_text(
+        text=search_prompt,
+        parse_mode="HTML"
+    )
+    
+    await state.set_state(SearchStates.waiting_for_query)
+    await callback.answer()
+
+
+@router.message(Command("cancel"))
+async def cmd_cancel(message: Message, state: FSMContext):
+    """Отмена текущего действия"""
+    current_state = await state.get_state()
+    
+    if current_state is None:
+        await message.answer("Нечего отменять.")
+        return
+    
+    await state.clear()
+    await message.answer(
+        "❌ Действие отменено.",
+        reply_markup=get_back_keyboard()
+    )
+
+
+@router.message(SearchStates.waiting_for_query)
+async def process_search_query(message: Message, state: FSMContext):
+    """Обработка запроса пользователя"""
+    user_query = message.text.strip()
+    user_id = message.from_user.id
+    
+    # Проверка длины запроса
+    if len(user_query) < 10:
+        await message.answer(
+            "⚠️ Запрос слишком короткий. Пожалуйста, опишите игру подробнее (минимум 10 символов)."
+        )
+        return
+    
+    if len(user_query) > 500:
+        await message.answer(
+            "⚠️ Запрос слишком длинный. Пожалуйста, сократите описание (максимум 500 символов)."
+        )
+        return
+    
+    # Отправка сообщения о начале обработки
+    processing_msg = await message.answer("⏳ Ищу подходящие игры... Это может занять несколько секунд.")
+    
+    try:
+        # Шаг 1: Получение рекомендаций от AI
+        game_names = await ai_service.get_game_recommendations(user_query)
+        
+        if not game_names:
+            await processing_msg.edit_text(
+                "😔 Не удалось получить рекомендации. Попробуйте переформулировать запрос или попробуйте позже.",
+                reply_markup=get_back_keyboard()
+            )
+            await state.clear()
+            return
+        
+        # Шаг 2: Получение детальной информации о каждой игре
+        games_info = []
+        for game_name in game_names:
+            game_info = await game_api_service.search_game(game_name)
+            if game_info:
+                games_info.append(game_info)
+        
+        if not games_info:
+            await processing_msg.edit_text(
+                "😔 К сожалению, не удалось найти информацию об играх. Попробуйте изменить запрос.",
+                reply_markup=get_back_keyboard()
+            )
+            await state.clear()
+            return
+        
+        # Шаг 3: Форматирование и отправка результатов
+        result_text = format_games_list(games_info)
+        
+        # Добавление изображений (опционально, только для первой игры)
+        if games_info[0].background_image:
+            try:
+                await message.answer_photo(
+                    photo=games_info[0].background_image,
+                    caption=result_text[:1024],  # Telegram ограничивает длину подписи
+                    parse_mode="HTML",
+                    reply_markup=get_back_keyboard()
+                )
+                await processing_msg.delete()
+            except Exception:
+                # Если не удалось отправить фото, отправляем просто текст
+                await processing_msg.edit_text(
+                    text=result_text,
+                    parse_mode="HTML",
+                    reply_markup=get_back_keyboard()
+                )
+        else:
+            await processing_msg.edit_text(
+                text=result_text,
+                parse_mode="HTML",
+                reply_markup=get_back_keyboard()
+            )
+        
+        # Шаг 4: Сохранение в историю
+        await db.add_search_query(user_id, user_query)
+        
+    except Exception as e:
+        print(f"Ошибка при обработке запроса: {e}")
+        await processing_msg.edit_text(
+            "😔 Произошла ошибка при обработке запроса. Пожалуйста, попробуйте позже.",
+            reply_markup=get_back_keyboard()
+        )
+    finally:
+        await state.clear()
