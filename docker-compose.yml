@@ -1,0 +1,22 @@
+version: '3.8'
+
+services:
+  game-finder-bot:
+    build: .
+    container_name: game-finder-bot
+    restart: unless-stopped
+    environment:
+      - BOT_TOKEN=${BOT_TOKEN}
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+      - RAWG_API_KEY=${RAWG_API_KEY}
+      - DATABASE_PATH=/app/data/bot_database.db
+      - OPENROUTER_MODEL=${OPENROUTER_MODEL:-deepseek/deepseek-chat}
+    volumes:
+      - ./data:/app/data
+    env_file:
+      - .env
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
