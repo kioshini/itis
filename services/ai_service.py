@@ -1,10 +1,11 @@
 """
 Сервис для работы с OpenRouter API (интеграция с нейросетью)
+Работает ТОЛЬКО с AI, без RAWG API
 """
 import aiohttp
 import json
 import re
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 import config
 
 
@@ -16,41 +17,48 @@ class AIService:
         self.api_key = config.OPENROUTER_API_KEY
         self.model = config.OPENROUTER_MODEL
     
-    async def get_game_recommendations(self, user_query: str) -> Optional[List[str]]:
+    async def get_game_recommendations_with_details(self, user_query: str) -> Optional[List[Dict[str, Any]]]:
         """
-        Получение рекомендаций игр от нейросети
+        Получение подробных рекомендаций игр от нейросети
         
         Args:
             user_query: Описание игры от пользователя
             
         Returns:
-            Список названий игр (3-5 штук) или None в случае ошибки
+            Список словарей с информацией об играх или None в случае ошибки
         """
         
         # Формирование промпта для нейросети
-        system_prompt = """Ты - эксперт по видеоиграм. Твоя задача - рекомендовать игры на основе описания пользователя.
+        system_prompt = """Ты - эксперт по видеоиграм. Твоя задача - рекомендовать игры и предоставить детальную информацию о них на русском языке.
 
 ВАЖНО:
-1. Верни ТОЛЬКО названия игр на английском языке
-2. Количество игр: от 3 до 5
-3. Формат ответа: каждая игра с новой строки, без нумерации
-4. Указывай только официальные названия игр
-5. Не добавляй никаких пояснений, только названия
+1. Порекомендуй от 3 до 5 подходящих игр
+2. Для каждой игры предоставь: название, жанры, платформы, год выпуска, рейтинг (примерный из 5), краткое описание (2-3 предложения)
+3. Формат ответа - JSON массив объектов
+4. ВСЕ описания и информация должны быть НА РУССКОМ ЯЗЫКЕ
+5. Название игры на английском, остальное на русском
 
 Пример правильного ответа:
-The Witcher 3: Wild Hunt
-Red Dead Redemption 2
-God of War"""
+[
+  {
+    "name": "The Witcher 3: Wild Hunt",
+    "genres": "RPG, Приключения, Открытый мир",
+    "platforms": "PC, PlayStation, Xbox, Nintendo Switch",
+    "released": "2015",
+    "rating": 4.8,
+    "description": "Эпическая ролевая игра с открытым миром о ведьмаке Геральте из Ривии. Путешествуйте по огромному фантазийному миру, сражайтесь с монстрами и принимайте решения, влияющие на судьбу персонажей. Игра славится глубоким сюжетом и проработанными квестами."
+  }
+]"""
 
         user_prompt = f"""Пользователь описывает игру, которую он ищет:
 "{user_query}"
 
-Порекомендуй 3-5 подходящих игр."""
+Порекомендуй 3-5 подходящих игр с подробной информацией в формате JSON. Все описания на русском языке!"""
 
         headers = {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json",
-            "HTTP-Referer": "https://github.com",  # Необходимо для OpenRouter
+            "HTTP-Referer": "https://github.com",
         }
         
         payload = {
@@ -60,7 +68,7 @@ God of War"""
                 {"role": "user", "content": user_prompt}
             ],
             "temperature": 0.7,
-            "max_tokens": 300
+            "max_tokens": 2000
         }
         
         try:
@@ -75,110 +83,39 @@ God of War"""
                         data = await response.json()
                         content = data['choices'][0]['message']['content']
                         
-                        # Парсинг ответа - извлечение названий игр
-                        games = [
-                            line.strip() 
-                            for line in content.strip().split('\n') 
-                            if line.strip() and not line.strip().startswith('#')
-                        ]
-                        
-                        # Очистка от нумерации (1., 2., и т.д.)
-                        games = [
-                            game.split('.', 1)[-1].strip() if '.' in game[:3] else game
-                            for game in games
-                        ]
-                        
-                        # Ограничение до 5 игр
+                        # Извлечение JSON из ответа
+                        try:
+                            # Ищем JSON в ответе (может быть обернут в markdown)
+                            json_match = re.search(r'\[.*\]', content, re.DOTALL)
+                            if json_match:
+                                json_str = json_match.group(0)
+                                games = json.loads(json_str)
+                                print(f"✅ Получено {len(games)} игр от AI")
+                                return games
+                            else:
+                                print("❌ JSON не найден в ответе AI")
+                                print(f"Ответ AI: {content[:300]}...")
+                                return None
+                        except json.JSONDecodeError as e:
+                            print(f"❌ Ошибка парсинга JSON: {e}")
+                            print(f"Ответ AI: {content[:300]}...")
+                            return None
                     else:
                         error_text = await response.text()
-                        print(f"Ошибка OpenRouter API: {response.status} - {error_text}")
-                        # Используем запасной метод при ошибке
-                        return await self._fallback_search(user_query)
+                        print(f"❌ Ошибка OpenRouter API: {response.status} - {error_text}")
+                        if response.status == 401:
+                            print("⚠️ API ключ OpenRouter недействителен.")
+                            print("📝 Получите новый ключ на: https://openrouter.ai/")
+                        elif response.status == 402:
+                            print("⚠️ Недостаточно кредитов на аккаунте OpenRouter.")
+                            print("💳 Пополните баланс на: https://openrouter.ai/settings/credits")
+                        return None
                         
         except aiohttp.ClientError as e:
-            print(f"Ошибка при запросе к OpenRouter: {e}")
-            # Используем запасной метод при ошибке
-            return await self._fallback_search(user_query)
+            print(f"❌ Ошибка при запросе к OpenRouter: {e}")
+            return None
         except Exception as e:
-            print(f"Неожиданная ошибка в AIService: {e}")
-            # Используем запасной метод при ошибке
-            return await self._fallback_search(user_query)
-    
-    async def _fallback_search(self, user_query: str) -> Optional[List[str]]:
-        """
-        Запасной метод поиска без AI - извлекаем ключевые слова и ищем в RAWG
-        
-        Args:
-            user_query: Описание от пользователя
-            
-        Returns:
-            Список названий игр или None
-        """
-        print("Используем запасной метод поиска без AI...")
-        
-        # Извлекаем ключевые слова (жанры, типы игр)
-        keywords_map = {
-            'rpg': 'RPG',
-            'рпг': 'RPG',
-            'шутер': 'shooter',
-            'shooter': 'shooter',
-            'стратег': 'strategy',
-            'strategy': 'strategy',
-            'космос': 'space',
-            'space': 'space',
-            'строительств': 'building',
-            'building': 'building',
-            'выживан': 'survival',
-            'survival': 'survival',
-            'открыт': 'open world',
-            'open world': 'open world',
-            'приключен': 'adventure',
-            'adventure': 'adventure',
-            'симулятор': 'simulation',
-            'simulation': 'simulation',
-            'гонк': 'racing',
-            'racing': 'racing',
-            'спорт': 'sports',
-            'sports': 'sports'
-        }
-        
-        # Поиск ключевых слов в запросе
-        query_lower = user_query.lower()
-        found_keywords = []
-        
-        for key, value in keywords_map.items():
-            if key in query_lower:
-                if value not in found_keywords:
-                    found_keywords.append(value)
-        
-        # Формируем поисковый запрос
-        search_query = ' '.join(found_keywords[:3]) if found_keywords else user_query[:50]
-        
-        # Ищем игры напрямую в RAWG API
-        try:
-            params = {
-                "key": config.RAWG_API_KEY,
-                "search": search_query,
-                "page_size": 5,
-                "ordering": "-rating"  # Сортировка по рейтингу
-            }
-            
-            async with aiohttp.ClientSession() as session:
-                async with session.get(
-                    f"{config.RAWG_API_URL}/games",
-                    params=params,
-                    timeout=aiohttp.ClientTimeout(total=10)
-                ) as response:
-                    if response.status == 200:
-                        data = await response.json()
-                        games = [game['name'] for game in data.get('results', [])[:5]]
-                        print(f"Найдено игр через запасной метод: {len(games)}")
-                        return games if games else None
-                    else:
-                        print(f"Ошибка RAWG API: {response.status}")
-                        return None
-        except Exception as e:
-            print(f"Ошибка в запасном методе поиска: {e}")
+            print(f"❌ Неожиданная ошибка в AIService: {e}")
             return None
 
 

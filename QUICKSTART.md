@@ -12,7 +12,6 @@ pip install -r requirements.txt
 ```env
 BOT_TOKEN=ваш_токен_от_BotFather
 OPENROUTER_API_KEY=ваш_ключ_openrouter
-RAWG_API_KEY=ваш_ключ_rawg
 DATABASE_PATH=bot_database.db
 ```
 
@@ -25,10 +24,6 @@ DATABASE_PATH=bot_database.db
 **OpenRouter:**
 - Зарегистрируйтесь на https://openrouter.ai/
 - Создайте API ключ в разделе "Keys"
-
-**RAWG:**
-- Зарегистрируйтесь на https://rawg.io/apidocs
-- Получите бесплатный API ключ
 
 ### 4. Запуск
 ```bash

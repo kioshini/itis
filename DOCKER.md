@@ -22,8 +22,6 @@ cp .env.example .env
 ```env
 BOT_TOKEN=your_telegram_bot_token
 OPENROUTER_API_KEY=your_openrouter_key
-RAWG_API_KEY=your_rawg_key
-OPENROUTER_MODEL=deepseek/deepseek-chat
 DATABASE_PATH=/app/data/bot_database.db
 ```
 
@@ -63,7 +61,6 @@ docker run -d \
   --restart unless-stopped \
   -e BOT_TOKEN="your_token" \
   -e OPENROUTER_API_KEY="your_key" \
-  -e RAWG_API_KEY="your_key" \
   -v $(pwd)/data:/app/data \
   game-finder-bot
 ```
@@ -174,14 +171,10 @@ services:
     secrets:
       - bot_token
       - openrouter_key
-      - rawg_key
-
 secrets:
   bot_token:
     external: true
   openrouter_key:
-    external: true
-  rawg_key:
     external: true
 ```
 

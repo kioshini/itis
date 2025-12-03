@@ -3,6 +3,8 @@
 """
 from database.models import GameInfo
 from typing import List
+from datetime import datetime, timezone, timedelta
+import config
 
 
 def format_game_info(game: GameInfo, index: int) -> str:
@@ -76,8 +78,8 @@ def format_history(history_items: List[tuple]) -> str:
     result = "📚 <b>Ваша история запросов:</b>\n\n"
     
     for i, (query, timestamp) in enumerate(history_items, 1):
-        # Форматирование даты
-        date_str = timestamp[:16].replace('T', ' ')  # Убираем секунды
+        # Форматирование даты с переводом в UTC+offset (по умолчанию +5)
+        date_str = to_local_time_str(timestamp)
         result += f"{i}. <i>{query}</i>\n   🕐 {date_str}\n\n"
     
     return result
@@ -108,3 +110,33 @@ def escape_html(text: str) -> str:
         text = text.replace(old, new)
     
     return text
+
+
+def to_local_time_str(ts: str) -> str:
+    """
+    Конвертирует строковый timestamp из БД (UTC) в локальное время по смещению.
+    Ожидает форматы вида 'YYYY-MM-DD HH:MM:SS' или ISO 'YYYY-MM-DDTHH:MM:SS'.
+    Возвращает строку 'YYYY-MM-DD HH:MM'.
+    """
+    if not ts:
+        return ""
+    try:
+        clean = ts.strip().replace("Z", "")
+        # fromisoformat поддерживает как ' ' так и 'T' между датой и временем
+        dt = datetime.fromisoformat(clean)
+    except Exception:
+        # fallback для явного формата SQLite
+        try:
+            dt = datetime.strptime(ts[:19], "%Y-%m-%d %H:%M:%S")
+        except Exception:
+            return ts[:16].replace('T', ' ')
+
+    # Считаем, что исходное время в БД — UTC без таймзоны
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    else:
+        dt = dt.astimezone(timezone.utc)
+
+    offset_hours = getattr(config, "TIMEZONE_OFFSET_HOURS", 5)
+    local_dt = dt + timedelta(hours=offset_hours)
+    return local_dt.strftime("%Y-%m-%d %H:%M")

@@ -9,8 +9,6 @@ from aiogram.types import Message, CallbackQuery
 from keyboards.inline import get_back_keyboard
 from database.db import db
 from services.ai_service import ai_service
-from services.game_api import game_api_service
-from utils.formatters import format_games_list
 
 router = Router()
 
@@ -109,67 +107,61 @@ async def process_search_query(message: Message, state: FSMContext):
         return
     
     # Отправка сообщения о начале обработки
-    processing_msg = await message.answer("⏳ Ищу подходящие игры... Это может занять несколько секунд.")
+    processing_msg = await message.answer("⏳ Анализирую ваш запрос и ищу подходящие игры... Подождите немного.")
     
     try:
-        # Шаг 1: Получение рекомендаций от AI
-        game_names = await ai_service.get_game_recommendations(user_query)
-        
-        if not game_names:
-            await processing_msg.edit_text(
-                "😔 Не удалось получить рекомендации. Попробуйте переформулировать запрос или попробуйте позже.",
-                reply_markup=get_back_keyboard()
-            )
-            await state.clear()
-            return
-        
-        # Шаг 2: Получение детальной информации о каждой игре
-        games_info = []
-        for game_name in game_names:
-            game_info = await game_api_service.search_game(game_name)
-            if game_info:
-                games_info.append(game_info)
+        # Получение детальных рекомендаций от AI
+        games_info = await ai_service.get_game_recommendations_with_details(user_query)
         
         if not games_info:
             await processing_msg.edit_text(
-                "😔 К сожалению, не удалось найти информацию об играх. Попробуйте изменить запрос.",
+                "😔 Не удалось получить рекомендации.\n\n"
+                "Возможные причины:\n"
+                "• Неправильный API ключ OpenRouter\n"
+                "• Недостаточно кредитов на балансе\n"
+                "• Проблемы с подключением\n\n"
+                "Проверьте настройки и попробуйте позже.",
                 reply_markup=get_back_keyboard()
             )
             await state.clear()
             return
         
-        # Шаг 3: Форматирование и отправка результатов
-        result_text = format_games_list(games_info)
+        # Форматирование результатов
+        result_text = "🎮 <b>Рекомендации для вас:</b>\n\n"
         
-        # Добавление изображений (опционально, только для первой игры)
-        if games_info[0].background_image:
-            try:
-                await message.answer_photo(
-                    photo=games_info[0].background_image,
-                    caption=result_text[:1024],  # Telegram ограничивает длину подписи
-                    parse_mode="HTML",
-                    reply_markup=get_back_keyboard()
-                )
-                await processing_msg.delete()
-            except Exception:
-                # Если не удалось отправить фото, отправляем просто текст
-                await processing_msg.edit_text(
-                    text=result_text,
-                    parse_mode="HTML",
-                    reply_markup=get_back_keyboard()
-                )
-        else:
-            await processing_msg.edit_text(
-                text=result_text,
-                parse_mode="HTML",
-                reply_markup=get_back_keyboard()
-            )
+        for i, game in enumerate(games_info, 1):
+            result_text += f"<b>{i}. {game.get('name', 'Неизвестно')}</b>\n"
+            
+            if game.get('rating'):
+                stars = "⭐" * int(float(game['rating']))
+                result_text += f"🎮 Рейтинг: {game['rating']}/5 {stars}\n"
+            
+            if game.get('released'):
+                result_text += f"📅 Год выпуска: {game['released']}\n"
+            
+            if game.get('genres'):
+                result_text += f"🎯 Жанры: {game['genres']}\n"
+            
+            if game.get('platforms'):
+                result_text += f"💻 Платформы: {game['platforms']}\n"
+            
+            if game.get('description'):
+                result_text += f"\n📝 <i>{game['description']}</i>\n"
+            
+            result_text += "\n" + "─" * 30 + "\n\n"
         
-        # Шаг 4: Сохранение в историю
+        # Отправка результатов
+        await processing_msg.edit_text(
+            text=result_text,
+            parse_mode="HTML",
+            reply_markup=get_back_keyboard()
+        )
+        
+        # Сохранение в историю
         await db.add_search_query(user_id, user_query)
         
     except Exception as e:
-        print(f"Ошибка при обработке запроса: {e}")
+        print(f"❌ Ошибка при обработке запроса: {e}")
         await processing_msg.edit_text(
             "😔 Произошла ошибка при обработке запроса. Пожалуйста, попробуйте позже.",
             reply_markup=get_back_keyboard()

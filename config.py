@@ -18,14 +18,15 @@ class Config:
     # OpenRouter API
     OPENROUTER_API_KEY: str = os.getenv("OPENROUTER_API_KEY", "")
     OPENROUTER_API_URL: str = "https://openrouter.ai/api/v1/chat/completions"
-    OPENROUTER_MODEL: str = os.getenv("OPENROUTER_MODEL", "deepseek/deepseek-chat")
-    
-    # RAWG API
-    RAWG_API_KEY: str = os.getenv("RAWG_API_KEY", "")
-    RAWG_API_URL: str = "https://api.rawg.io/api"
+    OPENROUTER_MODEL: str = os.getenv("OPENROUTER_MODEL", "amazon/nova-2-lite-v1:free")
     
     # Database
     DATABASE_PATH: str = os.getenv("DATABASE_PATH", "bot_database.db")
+    
+    # Timezone
+    # Используется сдвиг относительно UTC (в часах) для отображения времени
+    # По умолчанию UTC+5
+    TIMEZONE_OFFSET_HOURS: int = int(os.getenv("TIMEZONE_OFFSET_HOURS", "5"))
     
     @classmethod
     def validate(cls) -> None:
@@ -33,7 +34,6 @@ class Config:
         required_vars = {
             "BOT_TOKEN": cls.BOT_TOKEN,
             "OPENROUTER_API_KEY": cls.OPENROUTER_API_KEY,
-            "RAWG_API_KEY": cls.RAWG_API_KEY,
         }
         
         missing = [name for name, value in required_vars.items() if not value]
@@ -52,6 +52,5 @@ BOT_TOKEN = Config.BOT_TOKEN
 OPENROUTER_API_KEY = Config.OPENROUTER_API_KEY
 OPENROUTER_API_URL = Config.OPENROUTER_API_URL
 OPENROUTER_MODEL = Config.OPENROUTER_MODEL
-RAWG_API_KEY = Config.RAWG_API_KEY
-RAWG_API_URL = Config.RAWG_API_URL
 DATABASE_PATH = Config.DATABASE_PATH
+TIMEZONE_OFFSET_HOURS = Config.TIMEZONE_OFFSET_HOURS
