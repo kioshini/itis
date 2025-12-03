@@ -27,6 +27,9 @@ class Config:
     # Используется сдвиг относительно UTC (в часах) для отображения времени
     # По умолчанию UTC+5
     TIMEZONE_OFFSET_HOURS: int = int(os.getenv("TIMEZONE_OFFSET_HOURS", "5"))
+    # Имя таймзоны (IANA), при наличии имеет приоритет над смещением
+    # Например: "Asia/Yekaterinburg"
+    TIMEZONE_NAME: Optional[str] = os.getenv("TIMEZONE_NAME", "Asia/Yekaterinburg")
     
     @classmethod
     def validate(cls) -> None:
@@ -54,3 +57,4 @@ OPENROUTER_API_URL = Config.OPENROUTER_API_URL
 OPENROUTER_MODEL = Config.OPENROUTER_MODEL
 DATABASE_PATH = Config.DATABASE_PATH
 TIMEZONE_OFFSET_HOURS = Config.TIMEZONE_OFFSET_HOURS
+TIMEZONE_NAME = Config.TIMEZONE_NAME

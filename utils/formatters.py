@@ -4,6 +4,10 @@
 from database.models import GameInfo
 from typing import List
 from datetime import datetime, timezone, timedelta
+try:
+    from zoneinfo import ZoneInfo  # Python 3.9+
+except Exception:  # pragma: no cover
+    ZoneInfo = None  # type: ignore
 import config
 
 
@@ -137,6 +141,16 @@ def to_local_time_str(ts: str) -> str:
     else:
         dt = dt.astimezone(timezone.utc)
 
+    # Пытаемся применить именованную таймзону, если доступна
+    tz_name = getattr(config, "TIMEZONE_NAME", None)
+    if tz_name and ZoneInfo is not None:
+        try:
+            local_dt = dt.astimezone(ZoneInfo(tz_name))
+            return local_dt.strftime("%Y-%m-%d %H:%M")
+        except Exception:
+            pass
+
+    # Фоллбек: используем сдвиг в часах
     offset_hours = getattr(config, "TIMEZONE_OFFSET_HOURS", 5)
     local_dt = dt + timedelta(hours=offset_hours)
     return local_dt.strftime("%Y-%m-%d %H:%M")
