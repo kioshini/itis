@@ -1,0 +1,32 @@
+version: '3.8'
+
+services:
+  game-finder-bot:
+    build: .
+    container_name: game-finder-bot
+    restart: unless-stopped
+    environment:
+      BOT_TOKEN: ${BOT_TOKEN}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
+      OPENROUTER_MODEL: ${OPENROUTER_MODEL:-amazon/nova-2-lite-v1:free}
+      TIMEZONE_NAME: ${TIMEZONE_NAME:-Asia/Yekaterinburg}
+      TIMEZONE_OFFSET_HOURS: ${TIMEZONE_OFFSET_HOURS:-5}
+      DATABASE_PATH: /app/data/bot_database.db
+    volumes:
+      - bot_data:/app/data
+    networks:
+      - bot_network
+    healthcheck:
+      test: ["CMD", "python", "-c", "import sqlite3; sqlite3.connect('/app/data/bot_database.db')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+
+volumes:
+  bot_data:
+    driver: local
+
+networks:
+  bot_network:
+    driver: bridge
