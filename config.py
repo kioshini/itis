@@ -50,7 +50,19 @@ class Config:
 # Валидация конфигурации при импорте
 Config.validate()
 
-# Для обратной совместимости
+# Public API exports
+__all__ = [
+    'Config',
+    'BOT_TOKEN',
+    'OPENROUTER_API_KEY',
+    'OPENROUTER_API_URL',
+    'OPENROUTER_MODEL',
+    'DATABASE_PATH',
+    'TIMEZONE_OFFSET_HOURS',
+    'TIMEZONE_NAME',
+]
+
+# Для совместимости - экспортируем как модульные переменные
 BOT_TOKEN = Config.BOT_TOKEN
 OPENROUTER_API_KEY = Config.OPENROUTER_API_KEY
 OPENROUTER_API_URL = Config.OPENROUTER_API_URL

@@ -1,12 +1,13 @@
 """
-Сервис для работы с OpenRouter API (интеграция с нейросетью)
-Работает ТОЛЬКО с AI, без RAWG API
-"""
+"""Сервис для работы с OpenRouter API"""
 import aiohttp
 import json
+import logging
 import re
 from typing import List, Optional, Dict, Any
 import config
+
+logger = logging.getLogger(__name__)
 
 
 class AIService:
@@ -90,32 +91,29 @@ class AIService:
                             if json_match:
                                 json_str = json_match.group(0)
                                 games = json.loads(json_str)
-                                print(f"✅ Получено {len(games)} игр от AI")
+                                logger.info(f"Получено {len(games)} игр от AI")
                                 return games
                             else:
-                                print("❌ JSON не найден в ответе AI")
-                                print(f"Ответ AI: {content[:300]}...")
+                                logger.warning(f"JSON не найден в ответе: {content[:200]}...")
                                 return None
                         except json.JSONDecodeError as e:
-                            print(f"❌ Ошибка парсинга JSON: {e}")
-                            print(f"Ответ AI: {content[:300]}...")
+                            logger.error(f"Ошибка парсинга JSON: {e}")
+                            logger.debug(f"Ответ AI: {content[:300]}...")
                             return None
                     else:
                         error_text = await response.text()
-                        print(f"❌ Ошибка OpenRouter API: {response.status} - {error_text}")
+                        logger.error(f"Ошибка OpenRouter API: {response.status} - {error_text}")
                         if response.status == 401:
-                            print("⚠️ API ключ OpenRouter недействителен.")
-                            print("📝 Получите новый ключ на: https://openrouter.ai/")
+                            logger.warning("API ключ OpenRouter недействителен.")
                         elif response.status == 402:
-                            print("⚠️ Недостаточно кредитов на аккаунте OpenRouter.")
-                            print("💳 Пополните баланс на: https://openrouter.ai/settings/credits")
+                            logger.warning("Недостаточно кредитов на аккаунте OpenRouter.")
                         return None
                         
         except aiohttp.ClientError as e:
-            print(f"❌ Ошибка при запросе к OpenRouter: {e}")
+            logger.error(f"Ошибка при запросе к OpenRouter: {e}")
             return None
         except Exception as e:
-            print(f"❌ Неожиданная ошибка в AIService: {e}")
+            logger.error(f"Неожиданная ошибка в AIService: {e}")
             return None
 
 
